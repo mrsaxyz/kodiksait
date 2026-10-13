@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kodik Calculator</title>
+
+<style>
+/* Общие настройки */
+:root {
+    --bg: #010402;
+    --bg-soft: #070b08;
+    --panel: #0b100c;
+    --panel-soft: #111713;
+    --panel-hover: #172019;
+    --line: #202a22;
+    --line-light: #2b362d;
+    --green: #46be4d;
+    --green-light: #64d56a;
+    --green-dark: #235f27;
+    --white: #ffffff;
+    --text: #e7ebe7;
+    --muted: #8b968d;
+    --muted-dark: #626b64;
+    --danger: #d65c5c;
+    --topbar: 64px;
+    --statusbar: 28px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+}
+
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    border: 0;
+}
+
+.app {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    grid-template-rows: var(--topbar) 1fr var(--statusbar);
+    background: var(--bg);
+}
+
+/* Верхнее меню */
+.topbar {
+    display: grid;
+    grid-template-columns: 240px 1fr auto;
+    align-items: center;
+    gap: 20px;
+    padding: 0 18px;
+    background: #010402;
+    border-bottom: 1px solid var(--line);
+}
+
+.logo {
+    height: 42px;
+    width: auto;
+    display: block;
+}
+
+.top-search {
+    width: min(560px, 100%);
+    justify-self: center;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    color: var(--muted);
+    background: #0a0f0b;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.top-search:hover {
+    background: #0d130f;
+    border-color: var(--green-dark);
+}
+
+.top-search strong {
+    color: #bfc7c0;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.top-search span {
+    color: var(--muted-dark);
+    font-size: 11px;
+}
+
+.top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.top-button {
+    min-height: 34px;
+    padding: 0 13px;
+    color: var(--text);
+    background: #0b100c;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.top-button:hover {
+    background: var(--panel-hover);
+    border-color: var(--green-dark);
+}
+
+.top-button.green {
+    color: #071008;
+    background: var(--green);
+    border-color: var(--green);
+    font-weight: 700;
+}
+
+.top-button.green:hover {
+    background: var(--green-light);
+}
+
+/* Рабочая область */
+.workspace {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 52px 220px minmax(0, 1fr) 290px;
+    background: var(--bg);
+}
+
+.activity-bar {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8px 0;
+    background: #050806;
+    border-right: 1px solid var(--line);
+}
+
+.activity-group {
+    display: grid;
+    gap: 4px;
+}
+
+.activity-button {
+    width: 52px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    position: relative;
+    cursor: pointer;
+    color: #7f8a81;
+    background: transparent;
+    font-size: 18px;
+    transition: color .15s ease, background .15s ease;
+}
+
+.activity-button:hover {
+    color: var(--white);
+    background: #0c120e;
+}
+
+.activity-button.active {
+    color: var(--green);
+}
+
+.activity-button.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 2px;
+    background: var(--green);
+}
+
+/* Боковое меню */
+.explorer {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: 38px auto 1fr;
+    background: #080c09;
+    border-right: 1px solid var(--line);
+}
+
+.explorer-title {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    color: #aab3ab;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.project-title {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 12px;
+    color: #dbe0dc;
+    border-top: 1px solid #101611;
+    border-bottom: 1px solid #101611;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.file-list {
+    display: grid;
+    align-content: start;
+    padding: 6px 0;
+}
+
+.file-button {
+    min-height: 34px;
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    align-items: center;
+    gap: 7px;
+    padding: 0 12px 0 22px;
+    color: #aeb7af;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+    transition: background .12s ease, color .12s ease;
+}
+
+.file-button:hover {
+    color: var(--white);
+    background: #0f1510;
+}
+
+.file-button.active {
+    color: var(--white);
+    background: #141b15;
+}
+
+.file-icon {
+    color: var(--green);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+}
+
+/* Редактор */
+.editor {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: 40px 1fr;
+    background: #050806;
+}
+
+.tabs {
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    background: #080c09;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+}
+
+.tab {
+    min-width: 150px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 13px;
+    color: #89938b;
+    background: #080c09;
+    border-right: 1px solid var(--line);
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.tab:hover {
+    color: #cfd6d0;
+    background: #0c110d;
+}
+
+.tab.active {
+    color: var(--white);
+    background: #050806;
+    border-top: 1px solid var(--green);
+}
+
+.tab-type {
+    color: var(--green);
+    font-family: Consolas, "Courier New", monospace;
+}
+
+.editor-body {
+    min-height: 0;
+    position: relative;
+    overflow: auto;
+    background:
+        linear-gradient(rgba(70,190,77,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(70,190,77,.018) 1px, transparent 1px),
+        #050806;
+    background-size: 24px 24px;
+}
+
+.page {
+    min-height: 100%;
+    display: none;
+    padding: 34px;
+}
+
+.page.active {
+    display: block;
+}
+
+/* Калькулятор */
+.calculator-wrap {
+    width: min(760px, 100%);
+    display: grid;
+    gap: 18px;
+}
+
+.editor-path {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.editor-path strong {
+    color: var(--green);
+    font-weight: 600;
+}
+
+.calc-card {
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    background: #0a0f0b;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.28);
+}
+
+.calc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    padding: 0 2px;
+}
+
+.calc-head strong {
+    color: #dfe5df;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.calc-head span {
+    color: var(--green);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+}
+
+.display {
+    min-height: 126px;
+    display: grid;
+    align-content: space-between;
+    gap: 10px;
+    padding: 18px 20px;
+    background: #010402;
+    border: 1px solid #263129;
+    border-left: 3px solid var(--green);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.expression {
+    min-height: 18px;
+    color: #667068;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+}
+
+.result {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--white);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: clamp(38px, 6vw, 62px);
+    line-height: 1;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.key {
+    min-height: 58px;
+    color: #dfe4df;
+    background: #111713;
+    border: 1px solid #263129;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background .12s ease, border-color .12s ease, transform .06s ease;
+}
+
+.key:hover {
+    background: #18211a;
+    border-color: #344238;
+}
+
+.key:active,
+.key.keyboard-active {
+    transform: translateY(1px);
+    background: #1d281f;
+}
+
+.key.operation {
+    color: var(--green-light);
+    background: #0d160f;
+    border-color: #214525;
+}
+
+.key.action {
+    color: #bdc5be;
+    background: #151916;
+}
+
+.key.danger {
+    color: #f2c2c2;
+    background: #241414;
+    border-color: #4a2828;
+}
+
+.key.special {
+    color: #071008;
+    background: var(--green);
+    border-color: var(--green);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.key.special:hover {
+    background: var(--green-light);
+}
+
+.key.equal {
+    color: #071008;
+    background: var(--green);
+    border-color: var(--green);
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.key.equal:hover {
+    background: var(--green-light);
+}
+
+.key.zero {
+    grid-column: span 2;
+}
+
+/* История */
+.history-page {
+    width: min(820px, 100%);
+    display: grid;
+    gap: 18px;
+}
+
+.page-title {
+    display: grid;
+    gap: 8px;
+}
+
+.page-title h1 {
+    color: var(--white);
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1;
+}
+
+.page-title p {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.history-card {
+    overflow: hidden;
+    background: #0a0f0b;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.history-head {
+    min-height: 44px;
+    display: grid;
+    grid-template-columns: 60px 1fr 150px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    color: #7f8981;
+    background: #0d120e;
+    border-bottom: 1px solid var(--line);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.history-list {
+    display: grid;
+}
+
+.history-row {
+    min-height: 46px;
+    display: grid;
+    grid-template-columns: 60px 1fr 150px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    color: #bec6bf;
+    border-bottom: 1px solid #141b15;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+}
+
+.history-row:last-child {
+    border-bottom: 0;
+}
+
+.history-row strong {
+    color: var(--green-light);
+    text-align: right;
+}
+
+.empty {
+    padding: 22px 16px;
+    color: #687169;
+    font-size: 12px;
+}
+
+/* Справка */
+.readme {
+    width: min(820px, 100%);
+    display: grid;
+    gap: 18px;
+}
+
+.readme-block {
+    display: grid;
+    gap: 10px;
+    padding: 18px;
+    background: #0a0f0b;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.readme-block h2 {
+    color: var(--white);
+    font-size: 18px;
+}
+
+.readme-block p,
+.readme-block li {
+    color: #a3ada5;
+    font-size: 13px;
+    line-height: 1.65;
+}
+
+.readme-block ul {
+    display: grid;
+    gap: 6px;
+    padding-left: 18px;
+}
+
+.code-line {
+    padding: 12px 14px;
+    color: #cbd3cc;
+    background: #010402;
+    border-left: 3px solid var(--green);
+    border-radius: 4px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+}
+
+/* Панель Kodik */
+.assistant {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: 42px auto 1fr auto;
+    background: #080c09;
+    border-left: 1px solid var(--line);
+}
+
+.assistant-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+}
+
+.assistant-head strong {
+    color: #d9dfda;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.assistant-mode {
+    color: var(--green);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.assistant-status {
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+    border-bottom: 1px solid var(--line);
+}
+
+.status-label {
+    color: #69736b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.status-value {
+    color: #d5dcd6;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.status-value strong {
+    color: var(--green-light);
+}
+
+.assistant-log {
+    min-height: 0;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 14px;
+    overflow: auto;
+}
+
+.log-line {
+    padding: 10px 11px;
+    color: #9ea7a0;
+    background: #0c110d;
+    border: 1px solid #171f19;
+    border-radius: 6px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.log-line strong {
+    color: var(--green);
+}
+
+.quick-actions {
+    display: grid;
+    gap: 7px;
+    padding: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.quick-button {
+    min-height: 34px;
+    padding: 0 11px;
+    color: #b7c0b9;
+    background: #0d120e;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 11px;
+}
+
+.quick-button:hover {
+    color: var(--white);
+    background: #141b15;
+    border-color: var(--green-dark);
+}
+
+/* Командная панель */
+.command-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: none;
+    place-items: start center;
+    padding-top: 110px;
+    background: rgba(0,0,0,.46);
+}
+
+.command-backdrop.open {
+    display: grid;
+}
+
+.command-palette {
+    width: min(560px, calc(100% - 30px));
+    overflow: hidden;
+    background: #0a0f0b;
+    border: 1px solid #304035;
+    border-radius: 8px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.52);
+}
+
+.command-input {
+    width: 100%;
+    height: 48px;
+    padding: 0 15px;
+    color: var(--white);
+    background: #070b08;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    outline: none;
+}
+
+.command-list {
+    display: grid;
+    padding: 6px;
+}
+
+.command-item {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 0 10px;
+    color: #c2cac3;
+    background: transparent;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+}
+
+.command-item:hover {
+    color: var(--white);
+    background: #121a14;
+}
+
+.command-item span {
+    color: #667068;
+    font-size: 10px;
+}
+
+/* Строка состояния */
+.statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 10px;
+    color: #09240b;
+    background: var(--green);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.statusbar-left,
+.statusbar-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Адаптивность */
+@media (max-width: 1120px) {
+    .workspace {
+        grid-template-columns: 52px 205px minmax(0, 1fr);
+    }
+
+    .assistant {
+        display: none;
+    }
+}
+
+@media (max-width: 760px) {
+    .topbar {
+        grid-template-columns: 1fr auto;
+    }
+
+    .top-search {
+        display: none;
+    }
+
+    .workspace {
+        grid-template-columns: 44px minmax(0, 1fr);
+    }
+
+    .activity-button {
+        width: 44px;
+    }
+
+    .explorer {
+        display: none;
+    }
+
+    .page {
+        padding: 20px 14px;
+    }
+
+    .top-actions .top-button:first-child {
+        display: none;
+    }
+
+    .keys {
+        gap: 6px;
+    }
+
+    .key {
+        min-height: 54px;
+    }
+
+    .history-head,
+    .history-row {
+        grid-template-columns: 46px 1fr 100px;
+        padding: 0 10px;
+        gap: 8px;
+    }
+
+    .statusbar-right {
+        display: none;
+    }
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+    <!-- Верхнее меню -->
+    <header class="topbar">
+        <img
+            class="logo"
+            src="data:image/png;base64,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"
+            alt="Kodik"
+        >
+
+        <button class="top-search" id="openCommandTop" type="button">
+            <strong>Поиск команды</strong>
+            <span>Ctrl + K</span>
+        </button>
+
+        <div class="top-actions">
+            <button class="top-button" data-open-page="history" type="button">История</button>
+            <button class="top-button green" data-open-page="calculator" type="button">Калькулятор</button>
+        </div>
+    </header>
+
+    <!-- Рабочая область -->
+    <main class="workspace">
+
+        <!-- Панель иконок -->
+        <aside class="activity-bar">
+            <div class="activity-group">
+                <button class="activity-button active" data-open-page="calculator" type="button" title="Калькулятор">⌁</button>
+                <button class="activity-button" data-open-page="history" type="button" title="История">↺</button>
+                <button class="activity-button" data-open-page="readme" type="button" title="Справка">?</button>
+            </div>
+
+            <div class="activity-group">
+                <button class="activity-button" id="openCommandSide" type="button" title="Команды">⌘</button>
+            </div>
+        </aside>
+
+        <!-- Боковое меню -->
+        <aside class="explorer">
+            <div class="explorer-title">Explorer</div>
+            <div class="project-title">
+                <span>⌄</span>
+                <span>KODIK-CALCULATOR</span>
+            </div>
+
+            <div class="file-list">
+                <button class="file-button active" data-open-page="calculator" type="button">
+                    <span class="file-icon">JS</span>
+                    <span>calculator.js</span>
+                </button>
+
+                <button class="file-button" data-open-page="history" type="button">
+                    <span class="file-icon">{ }</span>
+                    <span>history.json</span>
+                </button>
+
+                <button class="file-button" data-open-page="readme" type="button">
+                    <span class="file-icon">#</span>
+                    <span>README.md</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Редактор -->
+        <section class="editor">
+            <div class="tabs">
+                <button class="tab active" data-open-page="calculator" type="button">
+                    <span class="tab-type">JS</span>
+                    <span>calculator.js</span>
+                </button>
+
+                <button class="tab" data-open-page="history" type="button">
+                    <span class="tab-type">{ }</span>
+                    <span>history.json</span>
+                </button>
+
+                <button class="tab" data-open-page="readme" type="button">
+                    <span class="tab-type">#</span>
+                    <span>README.md</span>
+                </button>
+            </div>
+
+            <div class="editor-body">
+
+                <!-- Калькулятор -->
+                <section class="page active" id="page-calculator">
+                    <div class="calculator-wrap">
+                        <div class="editor-path">
+                            <span>KODIK-CALCULATOR</span>
+                            <span>›</span>
+                            <strong>calculator.js</strong>
+                        </div>
+
+                        <div class="calc-card">
+                            <div class="calc-head">
+                                <strong>Calculator</strong>
+                                <span id="calcState">READY</span>
+                            </div>
+
+                            <div class="display">
+                                <div class="expression" id="expression">Введите число</div>
+                                <div class="result" id="display">0</div>
+                            </div>
+
+                            <div class="keys">
+                                <button class="key danger" data-action="clear" type="button">AC</button>
+                                <button class="key action" data-action="sign" type="button">+/−</button>
+                                <button class="key action" data-action="percent" type="button">%</button>
+                                <button class="key operation" data-operation="/" type="button">÷</button>
+
+                                <button class="key" data-digit="7" type="button">7</button>
+                                <button class="key" data-digit="8" type="button">8</button>
+                                <button class="key" data-digit="9" type="button">9</button>
+                                <button class="key operation" data-operation="*" type="button">×</button>
+
+                                <button class="key" data-digit="4" type="button">4</button>
+                                <button class="key" data-digit="5" type="button">5</button>
+                                <button class="key" data-digit="6" type="button">6</button>
+                                <button class="key operation" data-operation="-" type="button">−</button>
+
+                                <button class="key" data-digit="1" type="button">1</button>
+                                <button class="key" data-digit="2" type="button">2</button>
+                                <button class="key" data-digit="3" type="button">3</button>
+                                <button class="key operation" data-operation="+" type="button">+</button>
+
+                                <button class="key zero" data-digit="0" type="button">0</button>
+                                <button class="key" data-digit="." type="button">.</button>
+                                <button class="key equal" data-action="equal" type="button">=</button>
+
+                                <button class="key action" data-action="backspace" type="button">⌫</button>
+                                <button class="key special" data-action="bits" type="button">BYTE → BIT</button>
+                                <button class="key action" data-action="open-history" type="button">HISTORY</button>
+                                <button class="key action" data-action="command" type="button">CTRL + K</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- История -->
+                <section class="page" id="page-history">
+                    <div class="history-page">
+                        <div class="page-title">
+                            <h1>history.json</h1>
+                            <p>Последние вычисления текущей сессии.</p>
+                        </div>
+
+                        <div class="history-card">
+                            <div class="history-head">
+                                <span>#</span>
+                                <span>Expression</span>
+                                <span>Result</span>
+                            </div>
+                            <div class="history-list" id="historyList">
+                                <div class="empty">История пока пустая.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Справка -->
+                <section class="page" id="page-readme">
+                    <div class="readme">
+                        <div class="page-title">
+                            <h1>README.md</h1>
+                            <p>Здесь коротко о том, что умеет калькулятор и как им пользоваться.</p>
+                        </div>
+
+                        <div class="readme-block">
+                            <h2>Что умеет калькулятор</h2>
+                            <p>
+                                Здесь есть всё основное: сложение, вычитание, умножение и деление.
+                                Ещё можно посчитать процент, поменять знак числа или удалить последнюю цифру.
+                                Все вычисления сразу появляются на экране, а последние результаты сохраняются в истории.
+                            </p>
+                        </div>
+
+                        <div class="readme-block">
+                            <h2>BYTE → BIT</h2>
+                            <p>
+                                Отдельная кнопка переводит байты в биты. Просто введи количество байтов
+                                и нажми BYTE → BIT — калькулятор умножит число на 8 и покажет результат.
+                            </p>
+                            <div class="code-line">1 byte = 8 bits</div>
+                        </div>
+
+                        <div class="readme-block">
+                            <h2>Можно пользоваться клавиатурой</h2>
+                            <ul>
+                                <li>Цифры 0–9 и точка — ввод числа</li>
+                                <li>+ − * / — выбор операции</li>
+                                <li>Enter или = — получить результат</li>
+                                <li>Backspace — удалить последнюю цифру</li>
+                                <li>Escape — очистить калькулятор</li>
+                                <li>Ctrl + K — открыть быстрые команды</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </section>
+
+        <!-- Панель Kodik -->
+        <aside class="assistant">
+            <div class="assistant-head">
+                <strong>Kodik Act</strong>
+                <span class="assistant-mode">READY</span>
+            </div>
+
+            <div class="assistant-status">
+                <span class="status-label">Текущий результат</span>
+                <div class="status-value" id="assistantResult">Значение: <strong>0</strong></div>
+            </div>
+
+            <div class="assistant-log" id="assistantLog">
+                <div class="log-line"><strong>›</strong> Калькулятор готов к работе.</div>
+                <div class="log-line"><strong>›</strong> Ctrl + K открывает быстрые команды.</div>
+            </div>
+
+            <div class="quick-actions">
+                <button class="quick-button" data-quick="clear" type="button">Очистить калькулятор</button>
+                <button class="quick-button" data-quick="history" type="button">Открыть историю</button>
+                <button class="quick-button" data-quick="readme" type="button">Открыть README</button>
+            </div>
+        </aside>
+
+    </main>
+
+    <!-- Строка состояния -->
+    <footer class="statusbar">
+        <div class="statusbar-left">
+            <span>● READY</span>
+            <span>main*</span>
+        </div>
+
+        <div class="statusbar-right">
+            <span>UTF-8</span>
+            <span>JavaScript</span>
+            <span>Ln 1, Col 1</span>
+        </div>
+    </footer>
+</div>
+
+<!-- Командная панель -->
+<div class="command-backdrop" id="commandBackdrop">
+    <div class="command-palette">
+        <input
+            class="command-input"
+            id="commandInput"
+            type="text"
+            placeholder="Введите команду..."
+            autocomplete="off"
+        >
+
+        <div class="command-list">
+            <button class="command-item" data-command="calculator" type="button">
+                <strong>Открыть calculator.js</strong>
+                <span>Enter</span>
+            </button>
+
+            <button class="command-item" data-command="history" type="button">
+                <strong>Открыть history.json</strong>
+                <span>Enter</span>
+            </button>
+
+            <button class="command-item" data-command="readme" type="button">
+                <strong>Открыть README.md</strong>
+                <span>Enter</span>
+            </button>
+
+            <button class="command-item" data-command="clear" type="button">
+                <strong>Очистить калькулятор</strong>
+                <span>AC</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Элементы
+const display = document.getElementById("display");
+const expression = document.getElementById("expression");
+const calcState = document.getElementById("calcState");
+const historyList = document.getElementById("historyList");
+const assistantResult = document.getElementById("assistantResult");
+const assistantLog = document.getElementById("assistantLog");
+const commandBackdrop = document.getElementById("commandBackdrop");
+const commandInput = document.getElementById("commandInput");
+
+let firstNumber = "";
+let secondNumber = "";
+let selectedOperation = null;
+let waitingSecondNumber = false;
+let history = [];
+
+// Переключение страниц
+function openPage(pageName) {
+    document.querySelectorAll(".page").forEach(page => {
+        page.classList.remove("active");
+    });
+
+    document.querySelectorAll("[data-open-page]").forEach(button => {
+        button.classList.toggle("active", button.dataset.openPage === pageName);
+    });
+
+    const page = document.getElementById("page-" + pageName);
+
+    if (page) {
+        page.classList.add("active");
+    }
+}
+
+document.querySelectorAll("[data-open-page]").forEach(button => {
+    button.addEventListener("click", () => {
+        openPage(button.dataset.openPage);
+    });
+});
+
+// Отображение
+function currentValue() {
+    if (waitingSecondNumber && secondNumber !== "") {
+        return secondNumber;
+    }
+
+    if (firstNumber !== "") {
+        return firstNumber;
+    }
+
+    return "0";
+}
+
+function operationSymbol(operation) {
+    if (operation === "*") return "×";
+    if (operation === "/") return "÷";
+    if (operation === "-") return "−";
+    return operation || "";
+}
+
+// Размер числа на экране
+function fitDisplayText() {
+    display.style.fontSize = "";
+
+    let fontSize = parseFloat(getComputedStyle(display).fontSize);
+    const minFontSize = 18;
+
+    while (display.scrollWidth > display.clientWidth && fontSize > minFontSize) {
+        fontSize -= 2;
+        display.style.fontSize = fontSize + "px";
+    }
+}
+
+// Отображение
+function updateDisplay() {
+    display.textContent = currentValue();
+    fitDisplayText();
+
+    assistantResult.innerHTML = "Значение: <strong>" + currentValue() + "</strong>";
+
+    if (selectedOperation) {
+        expression.textContent =
+            firstNumber + " " +
+            operationSymbol(selectedOperation) + " " +
+            secondNumber;
+    } else {
+        expression.textContent = firstNumber ? "Текущее значение" : "Введите число";
+    }
+}
+
+function addLog(text) {
+    const line = document.createElement("div");
+    line.className = "log-line";
+    line.innerHTML = "<strong>›</strong> " + text;
+    assistantLog.prepend(line);
+
+    while (assistantLog.children.length > 5) {
+        assistantLog.removeChild(assistantLog.lastChild);
+    }
+}
+
+// Ввод чисел
+function inputDigit(digit) {
+    if (!waitingSecondNumber) {
+        if (digit === "." && firstNumber.includes(".")) return;
+
+        if (digit === "." && firstNumber === "") {
+            firstNumber = "0.";
+        } else if (firstNumber === "0" && digit !== ".") {
+            firstNumber = digit;
+        } else {
+            firstNumber += digit;
+        }
+    } else {
+        if (digit === "." && secondNumber.includes(".")) return;
+
+        if (digit === "." && secondNumber === "") {
+            secondNumber = "0.";
+        } else if (secondNumber === "0" && digit !== ".") {
+            secondNumber = digit;
+        } else {
+            secondNumber += digit;
+        }
+    }
+
+    calcState.textContent = "INPUT";
+    updateDisplay();
+}
+
+// Выбор операции
+function chooseOperation(operation) {
+    if (firstNumber === "") return;
+
+    if (selectedOperation && secondNumber !== "") {
+        calculate();
+    }
+
+    selectedOperation = operation;
+    waitingSecondNumber = true;
+    secondNumber = "";
+    calcState.textContent = "OPERATOR";
+    updateDisplay();
+}
+
+// Подсчеты
+function calculate() {
+    if (firstNumber === "" || secondNumber === "" || !selectedOperation) return;
+
+    const a = Number(firstNumber);
+    const b = Number(secondNumber);
+    let result;
+
+    switch (selectedOperation) {
+        case "+":
+            result = a + b;
+            break;
+        case "-":
+            result = a - b;
+            break;
+        case "*":
+            result = a * b;
+            break;
+        case "/":
+            if (b === 0) {
+                showError("Деление на ноль");
+                return;
+            }
+            result = a / b;
+            break;
+        default:
+            return;
+    }
+
+    const fullExpression =
+        firstNumber + " " +
+        operationSymbol(selectedOperation) + " " +
+        secondNumber;
+
+    addHistory(fullExpression, result);
+
+    firstNumber = formatNumber(result);
+    secondNumber = "";
+    selectedOperation = null;
+    waitingSecondNumber = false;
+
+    calcState.textContent = "DONE";
+    expression.textContent = fullExpression + " =";
+    display.textContent = firstNumber;
+    fitDisplayText();
+    assistantResult.innerHTML = "Значение: <strong>" + firstNumber + "</strong>";
+    addLog("Вычислено: " + fullExpression + " = " + firstNumber);
+}
+
+function formatNumber(number) {
+    if (!Number.isFinite(number)) return "0";
+
+    const rounded = Math.round((number + Number.EPSILON) * 100000000) / 100000000;
+    return String(rounded);
+}
+
+// Дополнительные операции
+function clearCalculator() {
+    firstNumber = "";
+    secondNumber = "";
+    selectedOperation = null;
+    waitingSecondNumber = false;
+    calcState.textContent = "READY";
+    updateDisplay();
+    addLog("Калькулятор очищен.");
+}
+
+function changeSign() {
+    const value = Number(currentValue());
+
+    if (value === 0) return;
+
+    if (waitingSecondNumber && secondNumber !== "") {
+        secondNumber = String(value * -1);
+    } else {
+        firstNumber = String(value * -1);
+    }
+
+    updateDisplay();
+}
+
+function percent() {
+    const value = Number(currentValue()) / 100;
+
+    if (waitingSecondNumber && secondNumber !== "") {
+        secondNumber = formatNumber(value);
+    } else {
+        firstNumber = formatNumber(value);
+    }
+
+    calcState.textContent = "PERCENT";
+    updateDisplay();
+}
+
+function backspace() {
+    if (waitingSecondNumber && secondNumber !== "") {
+        secondNumber = secondNumber.slice(0, -1);
+    } else if (!waitingSecondNumber && firstNumber !== "") {
+        firstNumber = firstNumber.slice(0, -1);
+    }
+
+    updateDisplay();
+}
+
+function bytesToBits() {
+    if (currentValue() === "0" && firstNumber === "") return;
+
+    const bytes = Number(currentValue());
+    const bits = bytes * 8;
+
+    addHistory(bytes + " byte → bit", bits);
+
+    firstNumber = formatNumber(bits);
+    secondNumber = "";
+    selectedOperation = null;
+    waitingSecondNumber = false;
+
+    expression.textContent = bytes + " bytes × 8 =";
+    display.textContent = firstNumber;
+    fitDisplayText();
+    assistantResult.innerHTML = "Значение: <strong>" + firstNumber + "</strong>";
+    calcState.textContent = "BYTE → BIT";
+    addLog(bytes + " bytes = " + firstNumber + " bits");
+}
+
+function showError(message) {
+    display.textContent = "Error";
+    fitDisplayText();
+    expression.textContent = message;
+    calcState.textContent = "ERROR";
+    addLog(message);
+
+    firstNumber = "";
+    secondNumber = "";
+    selectedOperation = null;
+    waitingSecondNumber = false;
+}
+
+// История
+function addHistory(text, result) {
+    history.unshift({
+        expression: text,
+        result: formatNumber(Number(result))
+    });
+
+    if (history.length > 10) {
+        history.pop();
+    }
+
+    renderHistory();
+}
+
+function renderHistory() {
+    historyList.innerHTML = "";
+
+    if (history.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "История пока пустая.";
+        historyList.appendChild(empty);
+        return;
+    }
+
+    history.forEach((item, index) => {
+        const row = document.createElement("div");
+        row.className = "history-row";
+
+        row.innerHTML =
+            "<span>" + String(index + 1).padStart(2, "0") + "</span>" +
+            "<span>" + item.expression + "</span>" +
+            "<strong>" + item.result + "</strong>";
+
+        historyList.appendChild(row);
+    });
+}
+
+// Кнопки калькулятора
+document.querySelectorAll("[data-digit]").forEach(button => {
+    button.addEventListener("click", () => {
+        inputDigit(button.dataset.digit);
+    });
+});
+
+document.querySelectorAll("[data-operation]").forEach(button => {
+    button.addEventListener("click", () => {
+        chooseOperation(button.dataset.operation);
+    });
+});
+
+document.querySelectorAll("[data-action]").forEach(button => {
+    button.addEventListener("click", () => {
+        const action = button.dataset.action;
+
+        if (action === "clear") clearCalculator();
+        if (action === "sign") changeSign();
+        if (action === "percent") percent();
+        if (action === "backspace") backspace();
+        if (action === "equal") calculate();
+        if (action === "bits") bytesToBits();
+        if (action === "open-history") openPage("history");
+        if (action === "command") openCommand();
+    });
+});
+
+// Быстрые действия
+document.querySelectorAll("[data-quick]").forEach(button => {
+    button.addEventListener("click", () => {
+        const action = button.dataset.quick;
+
+        if (action === "clear") clearCalculator();
+        if (action === "history") openPage("history");
+        if (action === "readme") openPage("readme");
+    });
+});
+
+// Командная панель
+function openCommand() {
+    commandBackdrop.classList.add("open");
+    commandInput.value = "";
+    commandInput.focus();
+}
+
+function closeCommand() {
+    commandBackdrop.classList.remove("open");
+}
+
+document.getElementById("openCommandTop").addEventListener("click", openCommand);
+document.getElementById("openCommandSide").addEventListener("click", openCommand);
+
+commandBackdrop.addEventListener("click", event => {
+    if (event.target === commandBackdrop) {
+        closeCommand();
+    }
+});
+
+document.querySelectorAll("[data-command]").forEach(button => {
+    button.addEventListener("click", () => {
+        const command = button.dataset.command;
+
+        if (command === "clear") {
+            clearCalculator();
+            openPage("calculator");
+        } else {
+            openPage(command);
+        }
+
+        closeCommand();
+    });
+});
+
+// Горячие клавиши
+document.addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openCommand();
+        return;
+    }
+
+    if (commandBackdrop.classList.contains("open")) {
+        if (event.key === "Escape") {
+            closeCommand();
+        }
+        return;
+    }
+
+    if (/^[0-9]$/.test(event.key)) {
+        inputDigit(event.key);
+    }
+
+    if (event.key === ".") {
+        inputDigit(".");
+    }
+
+    if (["+", "-", "*", "/"].includes(event.key)) {
+        chooseOperation(event.key);
+    }
+
+    if (event.key === "Enter" || event.key === "=") {
+        event.preventDefault();
+        calculate();
+    }
+
+    if (event.key === "Backspace") {
+        backspace();
+    }
+
+    if (event.key === "Escape") {
+        clearCalculator();
+    }
+});
+
+// Изменение размера окна
+window.addEventListener("resize", fitDisplayText);
+
+// Первый запуск
+updateDisplay();
+renderHistory();
+</script>
+</body>
+</html>
