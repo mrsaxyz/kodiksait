@@ -1,7 +1,5 @@
 # Учебный модуль CodeSlicer для ЛР № 3–6
 
-> **Важно:** это самостоятельный учебный веб-модуль по мотивам CodeSlicer, а **не копия production CodeSlicer**. Настоящий CodeSlicer — инструмент анализа зависимостей исходного кода с Python-ядром; его репозиторий: https://github.com/artemnoor/CodeSlicer. Здесь реализовано управление карточками демонстрационных проектов, чтобы показать HTML, JavaScript, Node.js, REST API, XHR и Fetch.
-
 ## Запуск
 
 Требуется Node.js 18+ и npm. Из каталога `lab03-06`:
