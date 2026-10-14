@@ -2,11 +2,9 @@
 
 **Сигорский Александр, ИБМ3-54Б.**
 
-Исходники и отчёты ЛР №1–6:
+Исходники и отчёты ЛР №3–6:
 
-- `lab01-02/` — калькулятор HTML/CSS/JavaScript в стилистике Kodik (существующие файлы в репозитории сохраняются).
 - [`lab03-06/`](lab03-06/) — отдельный учебный Node.js/JavaScript-модуль по мотивам CodeSlicer: карточки (ЛР3), REST API + Postman (ЛР4), XHR + CORS (ЛР5), Fetch/Promise/async-await и bundle (ЛР6).
-- [`lab03-06/report.pdf`](lab03-06/report.pdf) — PDF-отчёт ЛР3–6.
 
 > Учебный модуль **не содержит ядро настоящего CodeSlicer** и **не анализирует исходный код**. Production-система CodeSlicer реализована отдельно: https://github.com/artemnoor/CodeSlicer.
 
