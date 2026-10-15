@@ -1,0 +1,91 @@
+# Python and local tooling
+__pycache__/
+*.py[cod]
+build/
+dist/
+/*.whl
+/*.tar.gz
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.build-venv/
+venv/
+env/
+
+# Impact Engine runtime state and generated graphs
+.impact_engine/
+**/.impact_engine/
+.codeslicer/
+**/.codeslicer/
+output/
+graph.json
+graph_*.json
+graphify-out/
+*.runtime.json
+*.sqlite
+*.db
+
+# Browser and local UI artifacts
+.playwright-cli/
+frontend/.cache/
+sources-*.png
+
+# Local handoff materials; never commit generated verification bundles or patches
+codeslicer-agent-lsp-final.patch
+verification-package/
+
+# Generated benchmark reports and copied real-project outputs
+benchmarks/**/cli_*.json
+benchmarks/**/cli_stdout_stderr.txt
+benchmarks/**/baseline_graph.json
+benchmarks/**/impact_query_report.json
+benchmarks/*_report.json
+benchmarks/sprint*_*.json
+benchmarks/*_benchmark_summary.json
+benchmarks/*_breakdown.json
+benchmarks/benchmark_summary.json
+benchmarks/latest_summary.json
+benchmarks/sprint6_1/*.json
+benchmarks/sprint6/
+benchmarks/sprint6_real_projects/
+benchmarks/research_e2e/
+benchmarks/research_e2e_projects/
+benchmarks/candidate_support_packs/
+benchmarks/promoted_support_packs/
+benchmarks/sprint5/
+benchmarks/sprint5_fixtures/**/.impact_engine/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# VS Code extension build and package outputs (the source package is tracked)
+extensions/vscode/node_modules/
+extensions/vscode/out/
+extensions/vscode/*.vsix
+extensions/vscode/coverage/
+artifacts/
+# .NET build output from local SCIP golden fixtures and other local builds
+obj/
+bin/
+# Joern CLI working copies/CPGs created by explicit local validation
+workspace/
+src/impact_engine.egg-info/
+
+# Optional local checkouts of third-party acceptance corpora
+tests/corpus/
+# The single native runtime verified in this repository is intentional VSIX input.
+!extensions/vscode/runtime/
+!extensions/vscode/runtime/**
+!extensions/vscode/runtime/**/bin/
+!extensions/vscode/runtime/**/bin/**

@@ -1,0 +1,511 @@
+"""Python AST extractor implementation. Stage 4 complete."""
+import ast
+from pathlib import Path
+from typing import Mapping
+from impact_engine.models import GraphDocument, Node, Edge, Evidence
+
+
+_SKIP_DIRS = {
+    ".impact_engine", ".git", ".venv", "venv", "env", "__pycache__",
+    "node_modules", "external_tools", "dist", "build", "coverage",
+}
+
+
+class ASTFactExtractor(ast.NodeVisitor):
+    def __init__(self, relative_path: str, module_name: str, doc: GraphDocument):
+        self.relative_path = relative_path
+        self.module_name = module_name
+        self.doc = doc
+        
+        self.current_class = None
+        self.current_method = None
+        self.scope = module_name
+        self.imports: dict[str, str] = {}
+        # ``ast.unparse`` is used both while recording a parent fact and again
+        # while visiting its child expression.  Keep the cache strictly local
+        # to this one parsed file: AST object ids stay valid for the visit and
+        # no source-derived data is retained after extraction.
+        self._unparse_cache: dict[int, str] = {}
+
+    def _unparse(self, node: ast.AST) -> str:
+        key = id(node)
+        cached = self._unparse_cache.get(key)
+        if cached is not None:
+            return cached
+        value = ast.unparse(node)
+        self._unparse_cache[key] = value
+        return value
+
+    def _module_node(self):
+        """Return this file's module node through GraphDocument's O(1) index.
+
+        Import-heavy modules call this once per alias.  Scanning ``doc.nodes``
+        made the cost grow with every fact emitted by earlier files, despite
+        the document already maintaining a stable node index for this exact
+        lookup.
+        """
+        return self.doc.get_node(f"module:{self.module_name}")
+
+    def _record_import_alias(self, alias: str, target: str) -> None:
+        self.imports[alias] = target
+        module_node = self._module_node()
+        if module_node is not None:
+            aliases = module_node.properties.setdefault("import_aliases", {})
+            aliases[alias] = target
+
+    def add_fact_node(self, node_id: str, kind: str, name: str, properties: dict) -> None:
+        self.doc.add_node(Node(
+            id=node_id,
+            kind=kind,
+            name=name,
+            properties=properties
+        ))
+
+    def add_fact_edge(self, edge_id: str, kind: str, from_node: str, to_node: str, lineno: int, description: str) -> None:
+        evidence = Evidence(
+            description=description,
+            file=self.relative_path,
+            line=lineno,
+            source="EXTRACTED"
+        )
+        self.doc.add_edge(Edge(
+            id=edge_id,
+            kind=kind,
+            from_node=from_node,
+            to_node=to_node,
+            source="EXTRACTED",
+            confidence=1.0,
+            evidence=[evidence]
+        ))
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        class_name = node.name
+        parent_class = self.current_class
+        bases = []
+        for base in node.bases:
+            base_text = self._unparse(base)
+            bases.append(self.imports.get(base_text, f"{self.module_name}.{base_text}"))
+        
+        if self.current_class:
+            full_class_name = f"{self.current_class}.{class_name}"
+        else:
+            full_class_name = class_name
+            
+        class_id = f"class:{self.module_name}.{full_class_name}"
+        
+        old_scope = self.scope
+        self.scope = f"{self.module_name}.{full_class_name}"
+        self.current_class = full_class_name
+        
+        self.add_fact_node(
+            node_id=class_id,
+            kind="CLASS",
+            name=class_name,
+            properties={
+                "module": self.module_name,
+                "class": full_class_name,
+                "file": self.relative_path,
+                "line": node.lineno,
+                "end_line": getattr(node, "end_lineno", node.lineno),
+                "bases": bases,
+            }
+        )
+        
+        if parent_class:
+            parent_class_id = f"class:{self.module_name}.{parent_class}"
+            edge_id = f"{parent_class_id}__DECLARES__{class_id}"
+            self.add_fact_edge(edge_id, "DECLARES", parent_class_id, class_id, node.lineno, f"Class {class_name} declared in class {parent_class}")
+        else:
+            module_id = f"module:{self.module_name}"
+            edge_id = f"{module_id}__DECLARES__{class_id}"
+            self.add_fact_edge(edge_id, "DECLARES", module_id, class_id, node.lineno, f"Class {class_name} declared in module {self.module_name}")
+            
+        self.generic_visit(node)
+        
+        self.scope = old_scope
+        self.current_class = parent_class
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        self._visit_func(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        self._visit_func(node)
+
+    def _visit_func(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
+        func_name = node.name
+        old_method = self.current_method
+        old_scope = self.scope
+        
+        if self.current_class:
+            self.scope = f"{self.module_name}.{self.current_class}.{func_name}"
+            method_id = f"method:{self.scope}"
+            kind = "METHOD"
+        else:
+            self.scope = f"{self.module_name}.{func_name}"
+            method_id = f"method:{self.scope}"
+            kind = "METHOD"
+            
+        self.current_method = func_name
+
+        decorators = []
+        for dec in getattr(node, "decorator_list", []):
+            try:
+                decorators.append("@" + self._unparse(dec))
+            except Exception:
+                pass
+
+        properties = {
+            "module": self.module_name,
+            "class": self.current_class,
+            "name": func_name,
+            "scope": self.scope,
+            "file": self.relative_path,
+            "line": node.lineno,
+            "end_line": getattr(node, "end_lineno", node.lineno),
+        }
+        if decorators:
+            properties["decorators"] = decorators
+
+        # Parse parameter type annotations
+        if hasattr(node, "args") and hasattr(node.args, "args"):
+            param_order = []
+            for arg in node.args.args:
+                if arg.arg != "self":
+                    param_order.append(arg.arg)
+                    if arg.annotation:
+                        try:
+                            ann_str = self._unparse(arg.annotation)
+                            fq_name = self.imports.get(ann_str)
+                            if not fq_name:
+                                fq_name = f"{self.module_name}.{ann_str}"
+                            properties[f"param_type:{arg.arg}"] = fq_name
+                        except Exception:
+                            pass
+            if param_order:
+                properties["param_order"] = param_order
+        return_annotation = node.returns
+        if return_annotation is not None:
+            try:
+                return_text = self._unparse(return_annotation)
+                properties["return_type"] = self.imports.get(return_text, f"{self.module_name}.{return_text}")
+            except Exception:
+                pass
+                
+        # Parse parameter defaults (e.g. Depends(get_order_service))
+        if hasattr(node, "args") and node.args.defaults:
+            num_args = len(node.args.args)
+            num_defaults = len(node.args.defaults)
+            for idx, default_node in enumerate(node.args.defaults):
+                param_idx = num_args - num_defaults + idx
+                if param_idx >= 0 and param_idx < num_args:
+                    arg_name = node.args.args[param_idx].arg
+                    try:
+                        def_str = self._unparse(default_node)
+                        properties[f"param_default:{arg_name}"] = def_str
+                    except Exception:
+                        pass
+
+        self.add_fact_node(
+            node_id=method_id,
+            kind=kind,
+            name=func_name,
+            properties=properties
+        )
+        
+        if self.current_class:
+            class_id = f"class:{self.module_name}.{self.current_class}"
+            # Propagate param types from __init__ to the parent class node properties
+            if func_name == "__init__":
+                class_node = self.doc.get_node(class_id)
+                if class_node:
+                    for k, v in properties.items():
+                        if k.startswith("param_type:"):
+                            class_node.properties[k] = v
+            edge_id = f"{class_id}__DECLARES__{method_id}"
+            self.add_fact_edge(edge_id, "DECLARES", class_id, method_id, node.lineno, f"Method {func_name} declared in class {self.current_class}")
+        else:
+            module_id = f"module:{self.module_name}"
+            edge_id = f"{module_id}__DECLARES__{method_id}"
+            self.add_fact_edge(edge_id, "DECLARES", module_id, method_id, node.lineno, f"Function {func_name} declared in module {self.module_name}")
+            
+        self.generic_visit(node)
+        
+        self.current_method = old_method
+        self.scope = old_scope
+
+    def visit_Import(self, node: ast.Import):
+        module_id = f"module:{self.module_name}"
+        for name in node.names:
+            alias = name.asname or name.name
+            self._record_import_alias(alias, name.name)
+            target_module_id = f"module:{name.name}"
+            edge_id = f"{module_id}__IMPORTS__{target_module_id}"
+            self.add_fact_edge(edge_id, "IMPORTS", module_id, target_module_id, node.lineno, f"Module {self.module_name} imports {name.name}")
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        if node.module:
+            module_id = f"module:{self.module_name}"
+            if node.level:
+                base_parts = self.module_name.split(".") if self.relative_path.endswith("__init__.py") else self.module_name.split(".")[:-1]
+                package_parts = base_parts[: max(0, len(base_parts) - node.level + 1)]
+                resolved_module = ".".join(package_parts + node.module.split("."))
+            else:
+                resolved_module = node.module
+            for name in node.names:
+                alias = name.asname or name.name
+                self._record_import_alias(alias, f"{resolved_module}.{name.name}")
+            target_module_id = f"module:{resolved_module}"
+            edge_id = f"{module_id}__IMPORTS__{target_module_id}"
+            self.add_fact_edge(edge_id, "IMPORTS", module_id, target_module_id, node.lineno, f"Module {self.module_name} imports from {node.module}")
+        self.generic_visit(node)
+
+    def _record_assignment(
+        self,
+        target: ast.expr,
+        value: ast.expr,
+        lineno: int,
+        annotation: ast.expr | None = None,
+    ) -> None:
+        """Emit one assignment fact without losing the Python binding form.
+
+        ``AnnAssign`` is not merely syntax decoration in a typed Python code
+        base: it is often the only project-local evidence of the concrete
+        object stored in a dependency field.  Keep it on the same fact shape as
+        a regular assignment, so the resolver can apply identical conservative
+        data-flow rules to both forms.
+        """
+        if self.current_method:
+            parent_id = f"method:{self.scope}"
+        else:
+            parent_id = f"module:{self.scope}"
+
+        method_id = parent_id
+        target_str = self._unparse(target)
+
+        if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
+            target_kind = "self_attribute"
+        else:
+            target_kind = "local"
+
+        value_str = self._unparse(value)
+        props: dict[str, object] = {
+            "target": target_str,
+            "value": value_str,
+            "scope": self.scope,
+            "target_kind": target_kind,
+        }
+        if annotation is not None:
+            annotation_text = self._unparse(annotation)
+            # Resolve direct imported aliases while retaining the original
+            # spelling for built-ins and generic wrappers.
+            props["annotation"] = self.imports.get(annotation_text, annotation_text)
+
+        if isinstance(value, ast.Call):
+            call_name = self._unparse(value.func)
+            props["call_name"] = call_name
+            kw_args = {}
+            for kw in value.keywords:
+                if kw.arg:
+                    kw_args[kw.arg] = self._unparse(kw.value)
+            props["keyword_args"] = kw_args
+            if value.args:
+                props["args"] = [self._unparse(arg) for arg in value.args]
+
+        assignment_id = f"assignment:{self.scope}:{lineno}:{target_str}"
+        self.add_fact_node(
+            node_id=assignment_id,
+            kind="ASSIGNMENT",
+            name=f"{target_str} = {value_str}",
+            properties=props,
+        )
+
+        edge_id = f"{method_id}__CONTAINS__{assignment_id}"
+        self.add_fact_edge(
+            edge_id=edge_id,
+            kind="CONTAINS",
+            from_node=method_id,
+            to_node=assignment_id,
+            lineno=lineno,
+            description=f"Method contains assignment to {target_str}",
+        )
+
+    def visit_Assign(self, node: ast.Assign):
+        for target in node.targets:
+            self._record_assignment(target, node.value, node.lineno)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign):
+        # An annotation without a value is a declaration rather than an object
+        # binding; resolving it as a runtime type would fabricate call edges.
+        if node.value is not None:
+            self._record_assignment(node.target, node.value, node.lineno, node.annotation)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call):
+        if isinstance(node.func, ast.Attribute):
+            receiver = self._unparse(node.func.value)
+            method_name = node.func.attr
+            call_name = self._unparse(node.func)
+        else:
+            receiver = None
+            method_name = None
+            call_name = self._unparse(node.func)
+            
+        args = [self._unparse(arg) for arg in node.args]
+        kw_args = {}
+        for kw in node.keywords:
+            if kw.arg:
+                kw_args[kw.arg] = self._unparse(kw.value)
+                
+        props = {
+            "scope": self.scope,
+            "call_name": call_name,
+            "args": args,
+            "keyword_args": kw_args,
+            "file": self.relative_path,
+            "line": node.lineno,
+        }
+        if receiver is not None:
+            props["receiver"] = receiver
+        if method_name is not None:
+            props["method_name"] = method_name
+            
+        call_id = f"call:{self.scope}:{node.lineno}:{call_name}"
+        
+        self.add_fact_node(
+            node_id=call_id,
+            kind="CALL_EXPR",
+            name=f"{call_name}(...)",
+            properties=props
+        )
+        
+        if self.current_method:
+            parent_id = f"method:{self.scope}"
+            desc = f"Method contains call to {call_name}"
+        else:
+            parent_id = f"module:{self.scope}"
+            desc = f"Module contains call to {call_name}"
+            
+        edge_id = f"{parent_id}__CONTAINS__{call_id}"
+        self.add_fact_edge(
+            edge_id=edge_id,
+            kind="CONTAINS",
+            from_node=parent_id,
+            to_node=call_id,
+            lineno=node.lineno,
+            description=desc
+        )
+        
+        self.generic_visit(node)
+
+
+def extract_project(
+    path: str | Path,
+    files: list[str] | None = None,
+    *,
+    cancellation=None,
+    progress_callback=None,
+    parsed_trees: Mapping[str, ast.AST] | None = None,
+) -> GraphDocument:
+    root_path = Path(path).resolve()
+    doc = GraphDocument(metadata={"extractor": "python_ast", "status": "extracted", "path": str(root_path)})
+    
+    py_files = []
+    if root_path.is_file():
+        if root_path.suffix == ".py":
+            py_files.append(root_path)
+    else:
+        selected = set()
+        for item in files or []:
+            candidate = Path(str(item).replace("\\", "/"))
+            if candidate.is_absolute():
+                try:
+                    candidate = candidate.resolve().relative_to(root_path)
+                except (OSError, ValueError):
+                    continue
+            selected.add(candidate.as_posix())
+        from impact_engine.scope import iter_project_files, iter_selected_project_files
+        candidates = (
+            iter_selected_project_files(root_path, list(files or []), {".py"})
+            if files is not None
+            else iter_project_files(root_path, {".py"})
+        )
+        for p in candidates:
+            parts = p.relative_to(root_path).parts
+            if any(part.startswith(".") or part in _SKIP_DIRS for part in parts):
+                continue
+            if files is not None and str(p.relative_to(root_path).as_posix()) not in selected:
+                continue
+            py_files.append(p)
+            
+    py_files.sort()
+    
+    total_files = len(py_files)
+    for index, filepath in enumerate(py_files, start=1):
+        if cancellation is not None:
+            check = getattr(cancellation, "check", None)
+            if callable(check):
+                check()
+            elif getattr(cancellation, "is_set", lambda: False)():
+                raise TimeoutError("python extraction cancelled")
+        if root_path.is_file():
+            rel_path = filepath.name
+            module_name = filepath.stem
+        else:
+            rel_path = filepath.relative_to(root_path).as_posix()
+            module_parts = list(filepath.relative_to(root_path).with_suffix("").parts)
+            if module_parts and module_parts[-1] == "__init__":
+                module_parts.pop()
+            module_name = ".".join(module_parts)
+        
+        file_id = f"file:{rel_path}"
+        doc.add_node(Node(
+            id=file_id,
+            kind="FILE",
+            name=rel_path,
+            properties={"path": rel_path}
+        ))
+        
+        module_id = f"module:{module_name}"
+        doc.add_node(Node(
+            id=module_id,
+            kind="MODULE",
+            name=module_name,
+            properties={"name": module_name, "file": rel_path}
+        ))
+        
+        edge_id = f"{file_id}__CONTAINS__{module_id}"
+        doc.add_edge(Edge(
+            id=edge_id,
+            kind="CONTAINS",
+            from_node=file_id,
+            to_node=module_id,
+            source="EXTRACTED",
+            confidence=1.0,
+            evidence=[Evidence(
+                description=f"File {rel_path} contains module {module_name}",
+                file=rel_path,
+                line=1,
+                source="EXTRACTED"
+            )]
+        ))
+        
+        try:
+            tree = (parsed_trees or {}).get(rel_path)
+            if tree is None:
+                content = filepath.read_text(encoding="utf-8")
+                tree = ast.parse(content, filename=str(filepath))
+            extractor = ASTFactExtractor(rel_path, module_name, doc)
+            extractor.visit(tree)
+        except Exception as e:
+            doc.metadata[f"error_{rel_path}"] = str(e)
+        if progress_callback is not None:
+            progress_callback(
+                file=rel_path,
+                processed=index,
+                total=total_files,
+                message=f"Python: {rel_path}",
+            )
+            
+    return doc

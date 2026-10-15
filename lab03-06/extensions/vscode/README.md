@@ -1,0 +1,143 @@
+# CodeSlicer for VS Code
+
+CodeSlicer is local-first. The TypeScript package supplies the cockpit while the canonical Python Core is bundled as a separate process inside each platform-specific VSIX. Normal users do not install Python, pip, a virtualenv, source code, Graphify, or an executable.
+
+## Version contract
+
+The cockpit and analyzer have intentionally independent versions. The current
+Windows package is valid only when this tuple agrees:
+
+| Artifact | Expected version |
+| --- | --- |
+| VS Code extension folder and `package.json` | `0.6.43` |
+| `runtime/win32-x64/manifest.json` → `extensionCompatibility` | `0.6.43` |
+| bundled CodeSlicer analyzer (`runtimeVersion`) | `0.5.3` |
+
+`0.5.3` is the analyzer release, not the extension release. The manifest is
+the compatibility boundary; a mismatched extension folder, package manifest,
+or `extensionCompatibility` must be treated as an invalid installation.
+
+Install the matching VSIX, open a trusted project, and select **Review current changes**. The extension uses argv-only spawning with `shell: false` and logs argv, cwd, stdout, stderr, and exit status. No process runs during activation.
+
+## First review in VS Code
+
+1. Download the matching platform VSIX from the [VS Code platform runtime
+   workflow](https://github.com/artemnoor/CodeSlicer/actions/workflows/vscode-runtime.yml)
+   or a published release, then choose **Extensions → ⋯ → Install from VSIX…**
+   in VS Code.
+2. Open a trusted source workspace, select the **CodeSlicer** icon in the
+   Activity Bar, and click **Check readiness**. It reports the project and
+   bundled runtime before any analysis starts.
+3. Select **Review current changes**. Choose a source on the Review tab, then
+   use **Results** for risk/evidence and **Tests** to inspect an exact command.
+   A test is never started until you confirm that command in a fresh modal.
+
+![CodeSlicer Cockpit: a review result with risk, affected route and evidence](../../docs/images/codeslicer-vscode-cockpit.png)
+
+The **Help** tab contains task-oriented guides for review, tests, Git, map,
+GitHub PR and Graphify. A guide only navigates and highlights the real Cockpit
+controls; it never starts the runtime, Git, network access or a test.
+
+### When to open Local Hub
+
+Use **CodeSlicer: Open Local Hub** from the Command Palette when the browser
+is more convenient for a large map or a longer review. The command starts the
+bundled runtime only after that explicit request and opens
+`http://127.0.0.1:8001/` by default. The server is loopback-only; it is not a
+publicly deployed website or a remote code-analysis backend. The same Hub can
+be started from the Core with `impact-engine-local-api --default-project
+<project>`. See the repository [Local Hub guide](../../README.md#local-hub--тот-же-анализ-в-браузере).
+
+## Platform packages
+
+| Target | Build method |
+| --- | --- |
+| `win32-x64`, `win32-arm64` | native Windows runner |
+| `darwin-x64`, `darwin-arm64` | native macOS runner |
+| `linux-x64`, `linux-arm64` | native Linux runner |
+
+VS Code selects platform-specific packages created with `vsce --target`. The runtime resolves in the workspace extension host, so WSL, SSH, Dev Containers, and Codespaces need the matching VSIX installed in that remote window. Unsupported hosts get a diagnostic; CodeSlicer never downloads a substitute.
+
+Each package contains one `runtime/<target>/bin/codeslicer` executable. It has explicit CLI and `local-api` modes, avoiding a duplicate embedded Python runtime while preserving the Local Hub. The manifest carries version/platform/architecture/SHA-256 data and embedded-runtime notices/licenses; the extension verifies every declared file before execution, and an invalid checksum, missing file, or unsafe manifest path blocks the runtime.
+
+## Development and packaging
+
+```powershell
+cd extensions/vscode
+npm ci
+npm test
+# Press F5 here for an Extension Development Host.
+npm run package
+```
+
+`scripts/build_bundled_runtime.py` refuses cross-platform builds. It uses PyInstaller on a native runner to package the current Core, support packs, language plugins, Tree-sitter dependencies, and private Python runtime. Install `pyinstaller` in the build environment. CI creates non-Windows artifacts. Inspect generated VSIX files with `Expand-Archive` or `unzip -l`.
+
+The VSIX excludes the source repository, `.venv`, `node_modules`, caches, `.impact_engine`, Graphify outputs, tests, and secrets.
+
+## Large-workspace behavior
+
+The bundled Core keeps evidence correctness ahead of a deceptively fast
+partial result. A changed-file candidate cannot replace the canonical graph
+unless it covers the complete analysis scope; otherwise the next explicit
+review performs and reports a full refresh. This prevents routes, callers, and
+tests outside the changed file from disappearing from the workspace graph.
+
+On the Django repository at commit `60121939f6b225c7a719dd561e372e1d8e5e2c4a`
+(6,958 files; 315,345 nodes; 316,365 edges), CodeSlicer 0.6.30 reduced the
+post-hygiene/quality stage from 56.9 s to 14.7 s. A repeated review of the
+same local diff fell from 83.1 s to 61.5 s on the benchmark Windows x64 host.
+Cold-run timing is storage-dependent and measured 184–235 s, so it is not a
+cross-machine SLA.
+
+For large graphs, verbose hygiene annotations are kept in the local compressed
+sidecar `.impact_engine/project_hygiene.json.gz`. The main graph retains the
+summary and a reference; deep impact requests load the complete report only
+when needed. No code or graph is sent over the network.
+
+## Cockpit workflow
+
+The webview keeps the normal path simple:
+
+1. **Review** — choose working tree, staged changes, branch comparison, a local patch, or optional GitHub PR.
+2. **Results** — risk, reasons, affected entities, and evidence.
+3. **Tests** — recommendations; every real test requires a new modal confirmation.
+4. **Technologies** — built-in language coverage, graph freshness, and optional-pack status.
+5. **History** — the last local review summaries in workspace state.
+6. **Code** — a bounded canonical CodeSlicer slice; Graphify remains an explicitly connected, separate optional engine.
+7. **Git** — a separate branch tree with current/upstream state, remotes, recent commits, branch creation/switching, and a push preflight.
+
+The interactive guide only switches these real tabs. It does not invoke Git,
+the runtime, tests, or network requests.
+
+### Broad discovery is explicit
+
+The primary review contains only **Confirmed** and **Likely** impact. Select
+**Show potential scope** in the Results view (the extension requests
+`codeslicer review --show-potential`) to inspect a separate, collapsed safety
+layer: **Possible** low-confidence candidates, **Rejected** resolver
+relationships, and graph/coverage limitations. This layer never changes the
+risk score or adds tests to the recommended test plan. In CLI and MCP the
+same contract is explicit through `--show-potential` / `include_potential`;
+`--full-evidence` remains exclusively the complete proven impact closure.
+
+## Optional language packs
+
+Core language coverage is bundled for offline use. Additional language packs
+are deliberately unavailable until CodeSlicer publishes a signed registry and
+verification key. The extension does not contain a guessed endpoint or a
+pretend download action. A future registry must provide a target-specific,
+versioned manifest plus SHA-256 and signature verification, atomic installation
+and rollback; until then the Technologies screen reports the honest offline
+state.
+
+## Product boundaries
+
+The cockpit supports analysis, working-tree/compare/diff review, risk/evidence/test recommendations, confirmed test execution, selected-symbol inspect, local history, source navigation, and the canonical architecture slice. Local Hub opens only after an explicit user action and listens on loopback.
+
+Graphify is optional and separate: CodeSlicer never downloads or installs it, and its data does not affect canonical evidence or ranking. Local Git review needs no GitHub token.
+
+## Git cockpit and GitHub access
+
+The Git tab is intentionally explicit: it reads the local branch tree only after you select **Refresh tree**; create/switch branch and add-remote actions are each confirmed. Before a push you select the exact local source branch, remote, and destination branch. The extension shows ahead/behind status and blocks a likely non-fast-forward push. A second modal confirmation is required to push, and force-push is never offered.
+
+Push uses the Git credentials already configured for your machine (Git Credential Manager or SSH). CodeSlicer does not place a token into a remote URL, shell command, Output log, or workspace settings. The optional **Store GitHub token** control writes it only to VS Code Secret Storage for future GitHub API functionality; today GitHub PR preparation uses explicit VS Code OAuth and read-only API calls. Publishing PR comments/checks is not implemented.

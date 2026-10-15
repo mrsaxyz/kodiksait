@@ -1,0 +1,61 @@
+[project]
+name = "impact-engine"
+version = "0.5.3"
+description = "DI-aware impact analysis engine with MCP and AI-generated library support packs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter>=0.25,<0.26",
+    "tree-sitter-language-pack>=1.13,<1.14",
+    "requests>=2.31,<3",
+    "PyYAML>=6.0,<7",
+    "jsonschema>=4.23,<5",
+    "questionary>=2.1,<3",
+    "orjson>=3.10,<4"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<9"]
+# Kept separate so a normal local test install does not download a browser.
+browser = ["playwright>=1.48,<2"]
+
+[project.scripts]
+impact-engine = "impact_engine.cli:main"
+# A collision-free, user-facing command.  ``impact-engine`` is retained for
+# compatibility with existing integrations.
+codeslicer = "impact_engine.cli:main"
+impact-engine-mcp = "impact_engine.mcp.server:main"
+impact-engine-registry-api = "impact_engine.registry_api:main"
+impact-engine-local-api = "impact_engine.local_api:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = [
+    "impact_engine*",
+    "frontend_backend_endpoint_resolver*",
+    "nested_object_graph_resolver*",
+    "project_semantics_hygiene*",
+    "runtime_trace_booster*",
+    "semantic_binding*",
+    "plugins*",
+]
+exclude = ["tests*", "build*", "dist*"]
+
+[tool.setuptools.package-data]
+impact_engine = [
+    "agent_skills/**/*.md",
+    "support_packs/builtin/**/*.json",
+    "frontend/vendor/*.js",
+    "frontend/vendor/*.txt",
+]
+plugins = ["**/*.json", "**/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+norecursedirs = ["fixtures", "tests/fixtures", "tests/corpus"]
+markers = ["scip_interop: opt-in tests requiring explicitly installed external SCIP tooling and materialized golden artifacts", "lsp_interop: opt-in tests requiring an explicitly installed local Language Server", "cli_installation: opt-in tests requiring a clean installed impact-engine executable", "real_server: opt-in tests that CI runs against official Agent-LSP and real language servers"]
